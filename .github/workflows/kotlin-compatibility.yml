@@ -1,4 +1,4 @@
-name: Kotlin 2.4.20 compatibility
+name: Kotlin compatibility
 
 on:
   pull_request:
