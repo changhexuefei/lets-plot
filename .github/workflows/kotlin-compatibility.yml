@@ -54,3 +54,23 @@ jobs:
             :plot-builder:jvmTest \
             :plot-raster:jvmTest \
             --stacktrace
+
+
+  windows-configuration:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Configure and compile representative Windows modules
+        shell: pwsh
+        run: .\gradlew.bat -Pbuild_release=true -Penable_python_package=false :commons:compileKotlinJvm :visual-testing:compileKotlinJvm --stacktrace
