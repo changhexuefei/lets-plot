@@ -56,6 +56,8 @@ class SvgCanvasDrawable(svg: SvgSvgElement = SvgSvgElement()) : CanvasDrawable {
     private var svgCanvasPeer: SvgCanvasPeer? = null
     private var repaintManager: RepaintManager? = null
     private var svgMappingContext: SvgMappingContext? = null
+    private var nextCanvasMappingId: Long = 0
+    private var activeCanvasMappingId: Long? = null
     private var redrawPending: Boolean = false
     private val repaintRequestListeners = mutableListOf<() -> Unit>()
     private var onHrefClick: ((String) -> Unit)? = null
@@ -65,6 +67,14 @@ class SvgCanvasDrawable(svg: SvgSvgElement = SvgSvgElement()) : CanvasDrawable {
     }
 
     override fun mapToCanvas(canvasPeer: CanvasPeer): Registration {
+        // Only one canvas mapping can be active at a time. Dispose the previous mapping
+        // before installing a new one, and give the new mapping an ownership token so
+        // that a stale Registration cannot tear down a newer mapping.
+        clearCanvasMapping()
+
+        val mappingId = ++nextCanvasMappingId
+        activeCanvasMappingId = mappingId
+
         svgCanvasPeer = SvgCanvasPeer(canvasPeer, onRepaintRequested = { requestRedraw() })
         repaintManager = RepaintManager(canvasPeer).also {
             val overscanFactor = renderingHints[RenderingHints.KEY_OVERSCAN_FACTOR] as? Double
@@ -73,18 +83,33 @@ class SvgCanvasDrawable(svg: SvgSvgElement = SvgSvgElement()) : CanvasDrawable {
             }
         }
         mapSvgSvgElement()
+
         return object : Registration() {
             override fun doRemove() {
-                svgMappingContext?.dispose()
-                svgMappingContext = null
-
-                svgCanvasPeer?.dispose()
-                svgCanvasPeer = null
-
-                repaintManager?.dispose()
-                repaintManager = null
+                if (activeCanvasMappingId != mappingId) {
+                    return
+                }
+                activeCanvasMappingId = null
+                clearCanvasMapping()
             }
         }
+    }
+
+    private fun clearCanvasMapping() {
+        // Detach references before disposing so repeated/stale cleanup cannot reach
+        // the same active resources again.
+        val mappingContext = svgMappingContext
+        svgMappingContext = null
+
+        val canvasPeer = svgCanvasPeer
+        svgCanvasPeer = null
+
+        val currentRepaintManager = repaintManager
+        repaintManager = null
+
+        mappingContext?.dispose()
+        canvasPeer?.dispose()
+        currentRepaintManager?.dispose()
     }
 
     init {
@@ -272,7 +297,13 @@ class SvgCanvasDrawable(svg: SvgSvgElement = SvgSvgElement()) : CanvasDrawable {
             )
         }
 
+        private var disposed = false
+
         override fun dispose() {
+            if (disposed) {
+                return
+            }
+            disposed = true
             reg.dispose()
         }
 
