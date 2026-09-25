@@ -75,8 +75,12 @@ fun readPropertiesFromParameters() {
         properties["python.bin_path"] = project.property("python.bin_path")
         properties["python.include_path"] = project.property("python.include_path")
     }
-    if (!os.isWindows) {
-        properties["architecture"] = project.property("architecture")
+    properties["architecture"] = if (os.isWindows) {
+        // Windows builds are x64-only. Keep the value in root extras because
+        // multiplatform modules read it unconditionally during configuration.
+        "x86_64"
+    } else {
+        project.property("architecture")
     }
     for (property in properties) {
         extra[property.key as String] = property.value
@@ -97,8 +101,11 @@ fun readPropertiesFromFile() {
         )
     }
 
-    if (!os.isWindows) {
-        // Only 64bit version can be built for Windows, so the arch parameter is not needed and may not be set.
+    if (os.isWindows) {
+        // Windows builds are x64-only, but downstream modules still expect
+        // the architecture extra property to exist.
+        properties.putIfAbsent("architecture", "x86_64")
+    } else {
         assert(properties["architecture"] != null)
     }
 
